@@ -1,11 +1,15 @@
 package com.clinic.auth.service;
 
+import com.clinic.auth.dto.UserResponse;
 import com.clinic.auth.entity.User;
 import com.clinic.auth.repository.UserRepository;
+import com.clinic.auth.role.Role;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import com.clinic.auth.exception.EmailAlreadyExistsException;
 import com.clinic.auth.exception.UsernameAlreadyExistsException;
+
+import java.util.List;
 
 @Service
 public class UserService {
@@ -37,7 +41,7 @@ public class UserService {
                 username,
                 email,
                 encodedPassword,
-                "USER"
+                Role.USER
         );
 
         return userRepository.save(user);
@@ -46,5 +50,17 @@ public class UserService {
     public User findByUsername(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public List<UserResponse> getAllUsers() {
+        return userRepository.findAll()
+                .stream()
+                .map(user -> new UserResponse(
+                        user.getId(),
+                        user.getUsername(),
+                        user.getEmail(),
+                        user.getRole()
+                ))
+                .toList();
     }
 }

@@ -34,6 +34,13 @@ public class JwtService {
 
         return Jwts.builder()
                 .subject(userDetails.getUsername())
+                .claim(
+                        "role",
+                        userDetails.getAuthorities()
+                                .iterator()
+                                .next()
+                                .getAuthority()
+                )
                 .issuedAt(now)
                 .expiration(expirationDate)
                 .signWith(getSigningKey())
@@ -42,6 +49,10 @@ public class JwtService {
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    public String extractRole(String token) {
+        return extractClaim(token, claims -> claims.get("role", String.class));
     }
 
     public Date extractExpiration(String token) {

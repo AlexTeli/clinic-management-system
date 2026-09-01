@@ -2,6 +2,7 @@ package com.clinic.auth.service;
 
 import com.clinic.auth.entity.User;
 import com.clinic.auth.repository.UserRepository;
+import com.clinic.auth.role.Role;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -28,7 +29,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getUsername())
                 .password(user.getPassword())
-                .roles(user.getRole())
+                .roles(user.getRole().name())
                 .build();
     }
 }
