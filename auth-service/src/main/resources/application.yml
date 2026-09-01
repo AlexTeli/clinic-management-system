@@ -1,0 +1,23 @@
+  spring:
+    application:
+      name: auth-service
+
+    datasource:
+      url: jdbc:postgresql://localhost:5433/clinic_auth
+      username: clinic_auth_user
+      password: ${POSTGRES}
+
+    jpa:
+      hibernate:
+        ddl-auto: update
+      show-sql: true
+      properties:
+        hibernate:
+          format_sql: true
+
+  server:
+    port: 8081
+
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: 86400000
