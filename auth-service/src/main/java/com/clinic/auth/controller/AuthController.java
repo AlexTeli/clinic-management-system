@@ -1,15 +1,16 @@
 package com.clinic.auth.controller;
 
+import com.clinic.auth.dto.AuthResponse;
 import com.clinic.auth.dto.LoginRequest;
 import com.clinic.auth.dto.RegisterRequest;
-import com.clinic.auth.service.UserService;
 import com.clinic.auth.security.JwtService;
+import com.clinic.auth.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/auth")
@@ -42,7 +43,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<String> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
 
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
@@ -56,6 +57,8 @@ public class AuthController {
                         authentication.getPrincipal()
         );
 
-        return ResponseEntity.ok(token);
+        AuthResponse response = new AuthResponse(token, "Bearer");
+
+        return ResponseEntity.ok(response);
     }
 }
