@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: doctor-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/clinic_doctor
+    username: clinic_doctor_user
+    password: ${POSTGRES}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+server:
+  port: 8082
