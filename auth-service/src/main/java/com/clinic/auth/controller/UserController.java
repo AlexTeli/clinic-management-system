@@ -3,9 +3,7 @@ package com.clinic.auth.controller;
 import com.clinic.auth.dto.UserResponse;
 import com.clinic.auth.service.UserService;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -27,5 +25,12 @@ public class UserController {
     @GetMapping
     public List<UserResponse> getAllUsers() {
         return userService.getAllUsers();
+    }
+
+    @PutMapping("/{id}/promote-to-doctor")
+    public UserResponse promoteToDoctor(
+            @PathVariable Long id
+    ) {
+        return userService.promoteToDoctor(id);
     }
 }

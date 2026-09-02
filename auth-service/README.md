@@ -1,7 +1,7 @@
 # Auth Service
 
 Authentication and authorization microservice for the **Clinic Management System**.
-
+[]()
 This service is responsible for user registration, login, password security, JWT generation and validation, and role-based access control.
 
 The service is built as an independent Spring Boot application and is intended to be used as the authentication component of the future Clinic Management System microservices architecture.
@@ -346,6 +346,71 @@ GET /users
 This behavior confirms that role-based authorization is working correctly.
 
 ---
+## Promote User to Doctor
+
+Promotes an existing `USER` to the `DOCTOR` role.
+
+This operation can only be performed by an authenticated administrator.
+
+### Request
+
+```http
+PUT /users/{id}/promote-to-doctor
+Authorization: Bearer <admin-token>
+```
+
+Example:
+
+```http
+PUT /users/1/promote-to-doctor
+Authorization: Bearer <admin-token>
+```
+
+No request body is required.
+
+### Successful response
+
+```json
+{
+  "id": 1,
+  "username": "demo",
+  "email": "demo@gmail.com",
+  "role": "DOCTOR"
+}
+```
+
+The user's role is changed in the `auth-service` database:
+
+```text
+USER → DOCTOR
+```
+
+### Authorization behavior
+
+A normal user:
+
+```text
+PUT /users/1/promote-to-doctor
+→ 403 Forbidden
+```
+
+An administrator:
+
+```text
+PUT /users/1/promote-to-doctor
+→ 200 OK
+```
+
+### Promotion restrictions
+
+The following operations are not allowed:
+
+* A user who is already a `DOCTOR` cannot be promoted again.
+* An `ADMIN` cannot be promoted to `DOCTOR`.
+
+The professional information of the doctor, such as specialization, license number, experience and studies, will be managed by the `doctor-service`.
+
+The `auth-service` is responsible only for the user's identity and role.
 
 # Roles
 
@@ -620,6 +685,60 @@ without valid JWT
 
 # Current Status
 
+## Auth Service v1.1
+
+Implemented:
+
+* [x] ADMIN-only doctor promotion endpoint
+* [x] Promotion of a `USER` to `DOCTOR`
+* [x] Prevention of promoting an existing `DOCTOR`
+* [x] Prevention of promoting an `ADMIN` to `DOCTOR`
+* [x] `PUT /users/{id}/promote-to-doctor` endpoint
+* [x] ADMIN authorization for doctor promotion
+* [x] Doctor role persisted in the auth database
+* [x] Separation between authentication data and doctor professional data
+
+### Doctor Promotion Flow
+
+An administrator can promote a registered user to a doctor.
+
+```text
+USER
+  ↓
+ADMIN
+  ↓
+PUT /users/{id}/promote-to-doctor
+  ↓
+DOCTOR
+```
+
+The promotion changes the user's role in `auth-service` from:
+
+```text
+USER → DOCTOR
+```
+
+Only users with the `ADMIN` role are authorized to perform this operation.
+
+The professional doctor information, such as specialization, license number, experience and studies, will be managed separately by `doctor-service`.
+
+The relationship between the two services will be based on the user's ID:
+
+```text
+auth-service
+User.id = 15
+User.role = DOCTOR
+
+        ↓
+
+doctor-service
+Doctor.userId = 15
+```
+
+There is no direct database foreign key between the two microservices.
+
+
+
 ## Auth Service v1.0
 
 Implemented:
@@ -650,8 +769,10 @@ Implemented:
 
 ```text
 Auth Service
-Version: 1.0.0
+Version: 1.1.0
 Status: Stable
 ```
 
-This version represents the first functional authentication and authorization milestone of the Clinic Management System.
+This version represents the second authentication and authorization milestone of the Clinic Management System.
+
+The authentication service now supports the complete role transition from a regular `USER` to a `DOCTOR` through an administrator-controlled operation.

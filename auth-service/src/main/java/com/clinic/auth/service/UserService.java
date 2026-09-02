@@ -63,4 +63,37 @@ public class UserService {
                 ))
                 .toList();
     }
+
+    public UserResponse promoteToDoctor(Long userId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "User not found with id: " + userId
+                        )
+                );
+
+        if (user.getRole() == Role.DOCTOR) {
+            throw new RuntimeException(
+                    "User is already a doctor"
+            );
+        }
+
+        if (user.getRole() == Role.ADMIN) {
+            throw new RuntimeException(
+                    "An admin cannot be promoted to doctor"
+            );
+        }
+
+        user.setRole(Role.DOCTOR);
+
+        User updatedUser = userRepository.save(user);
+
+        return new UserResponse(
+                updatedUser.getId(),
+                updatedUser.getUsername(),
+                updatedUser.getEmail(),
+                updatedUser.getRole()
+        );
+    }
 }
