@@ -2,6 +2,8 @@ package com.clinic.auth.service;
 
 import com.clinic.auth.dto.UserResponse;
 import com.clinic.auth.entity.User;
+import com.clinic.auth.exception.InvalidUserOperationException;
+import com.clinic.auth.exception.UserNotFoundException;
 import com.clinic.auth.repository.UserRepository;
 import com.clinic.auth.role.Role;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -49,7 +51,7 @@ public class UserService {
 
     public User findByUsername(String username) {
         return userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
     }
 
     public List<UserResponse> getAllUsers() {
@@ -68,19 +70,19 @@ public class UserService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() ->
-                        new RuntimeException(
+                        new UserNotFoundException(
                                 "User not found with id: " + userId
                         )
                 );
 
         if (user.getRole() == Role.DOCTOR) {
-            throw new RuntimeException(
+            throw new InvalidUserOperationException(
                     "User is already a doctor"
             );
         }
 
         if (user.getRole() == Role.ADMIN) {
-            throw new RuntimeException(
+            throw new InvalidUserOperationException (
                     "An admin cannot be promoted to doctor"
             );
         }
