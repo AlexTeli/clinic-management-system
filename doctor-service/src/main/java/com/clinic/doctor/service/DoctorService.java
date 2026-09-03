@@ -1,12 +1,16 @@
 package com.clinic.doctor.service;
 
+import com.clinic.doctor.client.AuthUserResponse;
 import com.clinic.doctor.dto.DoctorRequest;
 import com.clinic.doctor.dto.DoctorResponse;
 import com.clinic.doctor.entity.Doctor;
+import com.clinic.doctor.exception.InvalidUserOperationException;
 import com.clinic.doctor.repository.DoctorRepository;
+import feign.FeignException;
 import org.springframework.stereotype.Service;
 import com.clinic.doctor.exception.DuplicateResourceException;
 import com.clinic.doctor.exception.ResourceNotFoundException;
+import com.clinic.doctor.client.AuthServiceClient;
 
 import java.util.List;
 
@@ -14,12 +18,33 @@ import java.util.List;
 public class DoctorService {
 
     private final DoctorRepository doctorRepository;
+    private final AuthServiceClient authServiceClient;
 
-    public DoctorService(DoctorRepository doctorRepository) {
+    public DoctorService(
+            DoctorRepository doctorRepository,
+            AuthServiceClient authServiceClient
+    ) {
         this.doctorRepository = doctorRepository;
+        this.authServiceClient = authServiceClient;
     }
 
     public DoctorResponse createDoctor(DoctorRequest request) {
+
+        AuthUserResponse user;
+
+        try {
+            user = authServiceClient.getUserById(request.getUserId());
+        } catch (FeignException.NotFound exception) {
+            throw new ResourceNotFoundException(
+                    "User not found with id: " + request.getUserId()
+            );
+        }
+
+        if (!"DOCTOR".equals(user.role())) {
+            throw new InvalidUserOperationException(
+                    "User must have DOCTOR role"
+            );
+        }
 
         if (doctorRepository.existsByUserId(request.getUserId())) {
             throw new DuplicateResourceException(

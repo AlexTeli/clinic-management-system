@@ -71,4 +71,16 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.FORBIDDEN)
                 .body(error);
     }
+
+    @ExceptionHandler(InvalidUserOperationException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidUserOperation(
+            InvalidUserOperationException exception
+    ) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", exception.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(error);
+    }
 }
