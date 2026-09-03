@@ -1,72 +1,115 @@
 # Auth Service
 
 Authentication and authorization microservice for the **Clinic Management System**.
-[]()
-This service is responsible for user registration, login, password security, JWT generation and validation, and role-based access control.
 
-The service is built as an independent Spring Boot application and is intended to be used as the authentication component of the future Clinic Management System microservices architecture.
+The `auth-service` is responsible for user identity, registration, login, password security, JWT generation, role management, and authentication-related service-to-service communication.
 
----
-
-## Features
-
-### Authentication
-
-* User registration
-* User login
-* Password hashing using BCrypt
-* JWT-based authentication
-* JWT expiration
-* Bearer token authentication
-* Authentication through Spring Security
-
-### Authorization
-
-The service supports role-based authorization using the following roles:
-
-* `USER`
-* `ADMIN`
-* `DOCTOR`
-* `PATIENT`
-
-Currently implemented:
-
-* `USER` authentication
-* `ADMIN` authorization
-* Protected endpoints using Spring Security
-* Role information included in the JWT
-
-`DOCTOR` and `PATIENT` roles are defined for the future microservices implementation.
-
-### Security
-
-* Passwords are never returned through API responses
-* Passwords are stored using BCrypt hashes
-* JWT secret is provided through an environment variable
-* Protected endpoints require a valid Bearer token
-* Administrative endpoints require the `ADMIN` role
-* Invalid authentication results in `401 Unauthorized`
-* Authenticated users without sufficient permissions receive `403 Forbidden`
+It is implemented as an independent Spring Boot microservice with its own PostgreSQL database.
 
 ---
 
-## Technologies
+# Overview
 
-| Technology      | Purpose                          |
-| --------------- | -------------------------------- |
-| Java 21         | Programming language             |
-| Spring Boot     | Application framework            |
+The authentication service owns the application's user identity and access-control data.
+
+It is responsible for:
+
+- User registration
+- User login
+- Password hashing
+- JWT generation
+- JWT-based authentication
+- Role management
+- Administrative user management
+- Promotion of users to doctors
+- Internal authentication for service-to-service communication
+
+Professional doctor information is **not** stored in this service.
+
+That information is managed by the separate `doctor-service`.
+
+The relationship between the two services is based on the user's ID:
+
+```text
+auth-service                         doctor-service
+
+User                                  Doctor
+--------------------------------      --------------------------------
+id = 15                               id = 4
+username = doctor1                    userId = 15
+role = DOCTOR                         specialization = Cardiology
+                                      licenseNumber = DOC-001
+```
+
+There is no direct JPA relationship or database foreign key between the two microservices.
+
+---
+
+# Features
+
+## Authentication
+
+- User registration
+- User login
+- Password hashing using BCrypt
+- JWT generation
+- JWT expiration
+- Bearer token authentication
+- JWT authentication filter
+- Spring Security integration
+
+## Authorization
+
+The service supports the following roles:
+
+- `USER`
+- `DOCTOR`
+- `ADMIN`
+
+Role information is included in the JWT.
+
+Administrative operations are protected using Spring Security role-based authorization.
+
+## User Management
+
+- Get all users
+- Get a user by ID
+- Get the currently authenticated user
+- Promote a `USER` to `DOCTOR`
+- Prevent invalid role promotions
+
+## Service-to-Service Authentication
+
+The service supports authenticated communication from trusted internal services.
+
+The `doctor-service` communicates with `auth-service` using:
+
+```text
+X-Service-Key
+```
+
+The service key is stored outside the source code using an environment variable.
+
+---
+
+# Technologies
+
+| Technology | Purpose |
+|---|---|
+| Java 21 | Programming language |
+| Spring Boot | Application framework |
 | Spring Security | Authentication and authorization |
-| Spring Data JPA | Database access                  |
-| Hibernate       | ORM                              |
-| PostgreSQL      | Database                         |
-| JJWT            | JWT generation and validation    |
-| BCrypt          | Password hashing                 |
-| Maven           | Dependency management            |
+| Spring Data JPA | Database access |
+| Hibernate | ORM |
+| PostgreSQL | Database |
+| JJWT | JWT generation and validation |
+| BCrypt | Password hashing |
+| Jakarta Validation | Request validation |
+| Maven | Dependency management |
 
 ---
 
-## Project Structure
+# Project Structure
 
 ```text
 auth-service/
@@ -98,6 +141,8 @@ auth-service/
     │   │               ├── exception/
     │   │               │   ├── EmailAlreadyExistsException.java
     │   │               │   ├── GlobalExceptionHandler.java
+    │   │               │   ├── InvalidUserOperationException.java
+    │   │               │   ├── UserNotFoundException.java
     │   │               │   └── UsernameAlreadyExistsException.java
     │   │               │
     │   │               ├── repository/
@@ -108,7 +153,8 @@ auth-service/
     │   │               │
     │   │               ├── security/
     │   │               │   ├── JwtAuthenticationFilter.java
-    │   │               │   └── JwtService.java
+    │   │               │   ├── JwtService.java
+    │   │               │   └── ServiceAuthenticationFilter.java
     │   │               │
     │   │               ├── service/
     │   │               │   ├── CustomUserDetailsService.java
@@ -124,9 +170,11 @@ auth-service/
 
 ---
 
-## Architecture
+# Architecture
 
 The authentication flow is based on JWT and Spring Security.
+
+## User Login Flow
 
 ```text
 Client
@@ -145,23 +193,32 @@ CustomUserDetailsService
   v
 PostgreSQL
   |
-  | user + BCrypt password
+  | User + BCrypt password
   v
 Authentication successful
   |
   v
 JwtService
   |
-  | JWT
+  | Generate JWT
   v
 AuthResponse
   |
-  | token + type
   v
 Client
 ```
 
-For protected endpoints:
+---
+
+# JWT Authentication
+
+Protected requests use the following header:
+
+```http
+Authorization: Bearer <JWT>
+```
+
+The request is processed by `JwtAuthenticationFilter`.
 
 ```text
 Client
@@ -173,11 +230,10 @@ JwtAuthenticationFilter
   v
 JwtService
   |
-  | validate JWT
+  | Validate signature + expiration
   v
-CustomUserDetailsService
+SecurityContext
   |
-  | load user + role
   v
 Spring Security
   |
@@ -187,6 +243,22 @@ Spring Security
   |
   +---- forbidden ---------> 403
 ```
+
+The JWT contains the user's identity and role.
+
+Example payload:
+
+```json
+{
+  "sub": "doctor1",
+  "userId": 15,
+  "role": "ROLE_DOCTOR",
+  "iat": "...",
+  "exp": "..."
+}
+```
+
+The JWT is signed using the configured secret.
 
 ---
 
@@ -219,7 +291,7 @@ Content-Type: application/json
 }
 ```
 
-Newly registered users receive the default role:
+New users receive the default role:
 
 ```text
 USER
@@ -231,11 +303,11 @@ USER
 User registered successfully
 ```
 
-The password is hashed before being stored in the database.
+The password is encoded using BCrypt before being stored.
 
 ---
 
-## Login
+# Login
 
 Authenticates an existing user and returns a JWT.
 
@@ -262,9 +334,7 @@ Content-Type: application/json
 }
 ```
 
-The JWT contains the authenticated username and role.
-
-The token must be sent with protected requests using:
+The token must be sent with protected requests:
 
 ```http
 Authorization: Bearer <token>
@@ -272,7 +342,7 @@ Authorization: Bearer <token>
 
 ---
 
-## Get Current User
+# Get Current User
 
 Returns information about the currently authenticated user.
 
@@ -286,14 +356,14 @@ Authorization: Bearer <token>
 ### Response
 
 ```text
-Logged in as: alex
+Logged in as: demo
 ```
 
 Any authenticated user can access this endpoint.
 
 ---
 
-## Get All Users
+# Get All Users
 
 Returns all registered users.
 
@@ -304,9 +374,9 @@ GET /users
 Authorization: Bearer <admin-token>
 ```
 
-This endpoint is restricted to users with the `ADMIN` role.
+**Required role:** `ADMIN`
 
-### Successful response
+### Response
 
 ```json
 [
@@ -325,32 +395,85 @@ This endpoint is restricted to users with the `ADMIN` role.
 ]
 ```
 
-The password is intentionally not included in the response.
+Passwords are never included in API responses.
 
-### Authorization behavior
-
-A normal user:
+### Authorization
 
 ```text
+USER + valid JWT
+        |
+        v
 GET /users
-→ 403 Forbidden
+        |
+        v
+403 Forbidden
 ```
-
-An administrator:
 
 ```text
+ADMIN + valid JWT
+        |
+        v
 GET /users
-→ 200 OK
+        |
+        v
+200 OK
 ```
-
-This behavior confirms that role-based authorization is working correctly.
 
 ---
-## Promote User to Doctor
+
+# Get User by ID
+
+Returns a user by their ID.
+
+### Request
+
+```http
+GET /users/{id}
+```
+
+This endpoint is intended for authenticated internal service communication.
+
+It is used by `doctor-service` when creating a doctor profile.
+
+Example:
+
+```http
+GET /users/15
+X-Service-Key: <internal-service-key>
+```
+
+### Response
+
+```json
+{
+  "id": 15,
+  "username": "doctor1",
+  "email": "doctor@gmail.com",
+  "role": "DOCTOR"
+}
+```
+
+If the user does not exist:
+
+```text
+404 Not Found
+```
+
+Example:
+
+```json
+{
+  "error": "User not found with id: 5"
+}
+```
+
+---
+
+# Promote User to Doctor
 
 Promotes an existing `USER` to the `DOCTOR` role.
 
-This operation can only be performed by an authenticated administrator.
+Only an administrator can perform this operation.
 
 ### Request
 
@@ -362,7 +485,7 @@ Authorization: Bearer <admin-token>
 Example:
 
 ```http
-PUT /users/1/promote-to-doctor
+PUT /users/15/promote-to-doctor
 Authorization: Bearer <admin-token>
 ```
 
@@ -372,69 +495,136 @@ No request body is required.
 
 ```json
 {
-  "id": 1,
-  "username": "demo",
-  "email": "demo@gmail.com",
+  "id": 15,
+  "username": "doctor1",
+  "email": "doctor@gmail.com",
   "role": "DOCTOR"
 }
 ```
 
-The user's role is changed in the `auth-service` database:
+The role changes:
 
 ```text
-USER → DOCTOR
-```
-
-### Authorization behavior
-
-A normal user:
-
-```text
-PUT /users/1/promote-to-doctor
-→ 403 Forbidden
-```
-
-An administrator:
-
-```text
-PUT /users/1/promote-to-doctor
-→ 200 OK
+USER
+  |
+  | ADMIN promotion
+  v
+DOCTOR
 ```
 
 ### Promotion restrictions
 
-The following operations are not allowed:
+The following operations are rejected:
 
-* A user who is already a `DOCTOR` cannot be promoted again.
-* An `ADMIN` cannot be promoted to `DOCTOR`.
+- Promoting an existing `DOCTOR`
+- Promoting an `ADMIN` to `DOCTOR`
+- Promoting a non-existent user
 
-The professional information of the doctor, such as specialization, license number, experience and studies, will be managed by the `doctor-service`.
+Example:
 
-The `auth-service` is responsible only for the user's identity and role.
-
-# Roles
-
-The current role enum is:
-
-```java
-public enum Role {
-    USER,
-    ADMIN,
-    DOCTOR,
-    PATIENT
+```json
+{
+  "error": "User is already a doctor"
 }
 ```
 
-### Current roles
+or:
 
-| Role      | Current purpose                           |
-| --------- | ----------------------------------------- |
-| `USER`    | Default role assigned during registration |
-| `ADMIN`   | Administrative operations                 |
-| `DOCTOR`  | Reserved for doctor functionality         |
-| `PATIENT` | Reserved for patient functionality        |
+```json
+{
+  "error": "An admin cannot be promoted to doctor"
+}
+```
 
-The `DOCTOR` and `PATIENT` roles will be used by future services.
+---
+
+# Service-to-Service Authentication
+
+The authentication service exposes user information to trusted internal services.
+
+The `doctor-service` needs to verify whether a given `userId` exists and whether the user has the `DOCTOR` role.
+
+The communication is protected using an internal API key.
+
+## Flow
+
+```text
+Doctor Service
+      |
+      | GET /users/15
+      | X-Service-Key: <internal-key>
+      v
+Auth Service
+      |
+      v
+ServiceAuthenticationFilter
+      |
+      | validate X-Service-Key
+      v
+ROLE_SERVICE
+      |
+      v
+GET user by ID
+      |
+      v
+UserResponse
+      |
+      v
+Doctor Service
+```
+
+The internal authentication is separate from user JWT authentication.
+
+### User authentication
+
+```text
+Authorization: Bearer <JWT>
+```
+
+Identifies a user.
+
+### Service authentication
+
+```text
+X-Service-Key: <internal-key>
+```
+
+Identifies a trusted internal service.
+
+The user JWT is not required to be forwarded from `doctor-service` to `auth-service`.
+
+---
+
+# ServiceAuthenticationFilter
+
+The internal service authentication is implemented through `ServiceAuthenticationFilter`.
+
+The filter:
+
+1. Reads the `X-Service-Key` header.
+2. Compares it with the configured internal API key.
+3. Rejects an invalid key with `401 Unauthorized`.
+4. Creates a `ROLE_SERVICE` authentication for a valid key.
+5. Allows the request to continue through Spring Security.
+
+Conceptually:
+
+```text
+X-Service-Key
+     |
+     v
+ServiceAuthenticationFilter
+     |
+     +---- invalid ----> 401
+     |
+     +---- valid
+             |
+             v
+       ROLE_SERVICE
+             |
+             v
+       protected endpoint
+```
 
 ---
 
@@ -442,7 +632,7 @@ The `DOCTOR` and `PATIENT` roles will be used by future services.
 
 ## Password Security
 
-Passwords are never stored as plain text.
+Passwords are never stored in plain text.
 
 The service uses BCrypt:
 
@@ -459,17 +649,13 @@ BCrypt hash
 PostgreSQL
 ```
 
-API responses use `UserResponse` instead of exposing the `User` entity directly.
-
-Therefore, the password field is never returned to clients.
+The password is never returned in `UserResponse`.
 
 ---
 
-## JWT
+# JWT Security
 
-JWT configuration uses environment variables.
-
-Example:
+JWT configuration:
 
 ```yaml
 jwt:
@@ -477,41 +663,104 @@ jwt:
   expiration: 86400000
 ```
 
-The secret itself must not be committed to Git.
+The JWT secret is provided through an environment variable.
 
-Example environment variables:
+The secret must never be committed to Git.
+
+---
+
+# Internal Service Security
+
+The service-to-service API key is also provided through an environment variable.
+
+```yaml
+service:
+  api-key: ${AUTH_SERVICE_API_KEY}
+```
+
+Example environment variable:
 
 ```text
-JWT_SECRET=<your-secret>
-POSTGRES=<your-database-password>
+AUTH_SERVICE_API_KEY=<internal-service-key>
 ```
+
+The actual secret value must not be stored in the repository.
+
+---
+
+# Roles
+
+The current role enum is:
+
+```java
+public enum Role {
+    USER,
+    ADMIN,
+    DOCTOR
+}
+```
+
+| Role | Purpose |
+|---|---|
+| `USER` | Default role assigned during registration |
+| `DOCTOR` | Doctor account and doctor-specific functionality |
+| `ADMIN` | Administrative operations |
+
+The `DOCTOR` role is used by `doctor-service` for doctor professional functionality.
+
+---
+
+# Authorization Matrix
+
+| Operation | USER | DOCTOR | ADMIN | SERVICE |
+|---|:---:|:---:|:---:|:---:|
+| Register | ✅ | — | — | — |
+| Login | ✅ | ✅ | ✅ | — |
+| Get current user | ✅ | ✅ | ✅ | — |
+| Get all users | ❌ | ❌ | ✅ | ❌ |
+| Get user by ID | ❌ | ❌ | ❌ | ✅ |
+| Promote user to doctor | ❌ | ❌ | ✅ | ❌ |
+
+`SERVICE` is an internal security authority and is not a user role stored in the database.
 
 ---
 
 # HTTP Status Codes
 
-| Status             | Meaning                                                   |
-| ------------------ | --------------------------------------------------------- |
-| `200 OK`           | Request successful                                        |
-| `400 Bad Request`  | Validation error                                          |
-| `401 Unauthorized` | Authentication is missing or invalid                      |
-| `403 Forbidden`    | User is authenticated but does not have the required role |
-| `409 Conflict`     | Username or email already exists                          |
+| Status | Meaning |
+|---|---|
+| `200 OK` | Request successful |
+| `400 Bad Request` | Validation error |
+| `401 Unauthorized` | Authentication is missing or invalid |
+| `403 Forbidden` | Authenticated identity does not have sufficient permissions |
+| `404 Not Found` | Requested user does not exist |
+| `409 Conflict` | Business rule conflict |
 
-Example:
+Examples:
 
 ```text
-USER + valid JWT + GET /users
-                ↓
-             403 Forbidden
+USER + GET /users
+→ 403 Forbidden
 ```
 
-while:
+```text
+Invalid JWT
+→ 401 Unauthorized
+```
 
 ```text
-ADMIN + valid JWT + GET /users
-                  ↓
-               200 OK
+Invalid X-Service-Key
+→ 401 Unauthorized
+```
+
+```text
+Missing user
+→ 404 Not Found
+```
+
+```text
+Existing DOCTOR promoted again
+→ 409 Conflict
 ```
 
 ---
@@ -520,28 +769,34 @@ ADMIN + valid JWT + GET /users
 
 Registration and login requests use Jakarta Bean Validation.
 
-Examples of validation include:
+Validation includes:
 
-* required username
-* required email
-* valid email format
-* required password
+- Required username
+- Required email
+- Valid email format
+- Required password
 
-Invalid requests are handled by the global exception handler and return a `400 Bad Request`.
+Invalid requests return:
+
+```text
+400 Bad Request
+```
 
 ---
 
 # Exception Handling
 
-The service contains a global exception handler for application-level errors.
+The service uses a global exception handler for application-level errors.
 
-Currently handled cases include:
+Currently handled exceptions include:
 
-* validation errors
-* duplicate usernames
-* duplicate emails
+- Validation errors
+- `UsernameAlreadyExistsException`
+- `EmailAlreadyExistsException`
+- `UserNotFoundException`
+- `InvalidUserOperationException`
 
-Example:
+Examples:
 
 ```json
 {
@@ -549,13 +804,40 @@ Example:
 }
 ```
 
+```json
+{
+  "error": "Email already exists"
+}
+```
+
+```json
+{
+  "error": "User not found with id: 5"
+}
+```
+
+```json
+{
+  "error": "User is already a doctor"
+}
+```
+
 ---
 
 # Database
 
-The service uses PostgreSQL.
+The authentication service uses PostgreSQL.
 
-Current database structure contains a `users` table with:
+Default local configuration:
+
+```text
+Host: localhost
+Port: 5433
+Database: clinic_auth
+Username: clinic_auth_user
+```
+
+The `users` table contains:
 
 ```text
 id
@@ -567,7 +849,64 @@ role
 
 Username and email are unique.
 
+The password column stores a BCrypt hash.
+
 The role is stored according to the application's `Role` enum.
+
+---
+
+# Configuration
+
+Example configuration:
+
+```yaml
+spring:
+  application:
+    name: auth-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/clinic_auth
+    username: clinic_auth_user
+    password: ${POSTGRES}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+server:
+  port: 8081
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 86400000
+
+service:
+  api-key: ${AUTH_SERVICE_API_KEY}
+```
+
+The service runs on:
+
+```text
+http://localhost:8081
+```
+
+---
+
+# Environment Variables
+
+The service requires:
+
+```text
+POSTGRES=<database-password>
+JWT_SECRET=<jwt-secret>
+AUTH_SERVICE_API_KEY=<internal-service-key>
+```
+
+Never commit real secrets to Git.
 
 ---
 
@@ -575,10 +914,10 @@ The role is stored according to the application's `Role` enum.
 
 ## Requirements
 
-* Java 21
-* Maven
-* PostgreSQL
-* IntelliJ IDEA or another Java IDE
+- Java 21
+- Maven
+- PostgreSQL
+- IntelliJ IDEA or another Java IDE
 
 ## Database
 
@@ -589,50 +928,96 @@ Example:
 ```text
 Database: clinic_auth
 Port: 5433
+Username: clinic_auth_user
 ```
 
 Configure the database credentials through environment variables.
 
 ---
 
-## Environment Variables
+## Start
 
-The application requires:
+From IntelliJ IDEA:
 
-```text
-JWT_SECRET=<your-jwt-secret>
-POSTGRES=<your-postgres-password>
-```
+1. Configure the required environment variables.
+2. Make sure PostgreSQL is running.
+3. Run `AuthServiceApplication`.
+4. The application starts on port `8081`.
 
-Do not commit real secrets to the repository.
-
----
-
-## Start the application
-
-From the `auth-service` directory:
-
-### Windows
+Alternatively, on Windows:
 
 ```bash
 mvnw.cmd spring-boot:run
 ```
 
-or run `AuthServiceApplication` from IntelliJ IDEA.
+---
 
-The service runs on:
+# Integration with Doctor Service
+
+The authentication service is the owner of user identity and roles.
+
+The doctor service owns professional doctor information.
+
+The complete doctor creation flow is:
 
 ```text
-http://localhost:8081
+1. USER registers
+        |
+        v
+2. ADMIN promotes USER
+        |
+        v
+3. USER becomes DOCTOR
+        |
+        v
+4. ADMIN creates Doctor profile
+        |
+        v
+5. doctor-service calls auth-service
+        |
+        | GET /users/{userId}
+        | X-Service-Key
+        v
+6. auth-service validates internal service
+        |
+        v
+7. User exists?
+        |
+        +---- NO ----> 404
+        |
+        v
+8. User role == DOCTOR?
+        |
+        +---- NO ----> 409
+        |
+        v
+9. doctor-service creates Doctor profile
 ```
+
+The two databases remain independent:
+
+```text
+clinic_auth
+     |
+     | User.id
+     |
+     +--------------------+
+                          |
+                          v
+                    Doctor.userId
+                          |
+                    clinic_doctor
+```
+
+No cross-service database foreign key is used.
 
 ---
 
 # Testing
 
-The service was tested using Postman.
+The service has been tested using Postman.
 
-The main scenarios are:
+Tested scenarios include:
 
 ### Registration
 
@@ -641,138 +1026,224 @@ POST /auth/register
 → 200 OK
 ```
 
+### Duplicate username
+
+```text
+POST /auth/register
+→ 409 Conflict
+```
+
+### Duplicate email
+
+```text
+POST /auth/register
+→ 409 Conflict
+```
+
 ### Login
 
 ```text
 POST /auth/login
 → 200 OK
-→ JWT returned in AuthResponse
+→ JWT returned
 ```
 
-### Authenticated endpoint
+### Current user
 
 ```text
 GET /users/me
-Authorization: Bearer <USER_TOKEN>
 → 200 OK
 ```
 
-### User attempting admin endpoint
+### Admin user listing
 
 ```text
-GET /users
-Authorization: Bearer <USER_TOKEN>
+ADMIN + GET /users
+→ 200 OK
+```
+
+### Unauthorized user listing
+
+```text
+USER + GET /users
 → 403 Forbidden
 ```
 
-### Admin accessing admin endpoint
+### Doctor promotion
 
 ```text
-GET /users
-Authorization: Bearer <ADMIN_TOKEN>
+ADMIN + PUT /users/{id}/promote-to-doctor
 → 200 OK
 ```
 
-### Invalid/missing authentication
+### Invalid doctor promotion
+
+```text
+Already DOCTOR
+→ 409 Conflict
+```
+
+```text
+ADMIN promoted to DOCTOR
+→ 409 Conflict
+```
+
+### User lookup
+
+```text
+SERVICE + GET /users/{id}
+→ 200 OK
+```
+
+### Non-existent user
+
+```text
+SERVICE + GET /users/{id}
+→ 404 Not Found
+```
+
+### Invalid service authentication
+
+```text
+Invalid X-Service-Key
+→ 401 Unauthorized
+```
+
+### Missing/invalid JWT
 
 ```text
 Protected endpoint
-without valid JWT
 → 401 Unauthorized
 ```
 
 ---
 
-# Current Status
+# Version 1.2.0
 
-## Auth Service v1.1
-
-Implemented:
-
-* [x] ADMIN-only doctor promotion endpoint
-* [x] Promotion of a `USER` to `DOCTOR`
-* [x] Prevention of promoting an existing `DOCTOR`
-* [x] Prevention of promoting an `ADMIN` to `DOCTOR`
-* [x] `PUT /users/{id}/promote-to-doctor` endpoint
-* [x] ADMIN authorization for doctor promotion
-* [x] Doctor role persisted in the auth database
-* [x] Separation between authentication data and doctor professional data
-
-### Doctor Promotion Flow
-
-An administrator can promote a registered user to a doctor.
-
-```text
-USER
-  ↓
-ADMIN
-  ↓
-PUT /users/{id}/promote-to-doctor
-  ↓
-DOCTOR
-```
-
-The promotion changes the user's role in `auth-service` from:
-
-```text
-USER → DOCTOR
-```
-
-Only users with the `ADMIN` role are authorized to perform this operation.
-
-The professional doctor information, such as specialization, license number, experience and studies, will be managed separately by `doctor-service`.
-
-The relationship between the two services will be based on the user's ID:
-
-```text
-auth-service
-User.id = 15
-User.role = DOCTOR
-
-        ↓
-
-doctor-service
-Doctor.userId = 15
-```
-
-There is no direct database foreign key between the two microservices.
-
-
-
-## Auth Service v1.0
-
-Implemented:
-
-* [x] Spring Boot application
-* [x] PostgreSQL integration
-* [x] User entity
-* [x] User repository
-* [x] User registration
-* [x] BCrypt password hashing
-* [x] Login
-* [x] JWT generation
-* [x] JWT validation
-* [x] JWT authentication filter
-* [x] AuthResponse
-* [x] UserResponse
-* [x] Request validation
-* [x] Global exception handling
-* [x] Role enum
-* [x] Role-based authorization
-* [x] ADMIN-only user listing
-* [x] Environment variables for secrets
-* [x] USER vs ADMIN authorization testing
-
----
-
-## Version
+## Status
 
 ```text
 Auth Service
-Version: 1.1.0
+Version: 1.2.0
 Status: Stable
 ```
 
-This version represents the second authentication and authorization milestone of the Clinic Management System.
+Version `1.2.0` represents the current completed authentication milestone of the Clinic Management System.
 
-The authentication service now supports the complete role transition from a regular `USER` to a `DOCTOR` through an administrator-controlled operation.
+### Implemented
+
+- [x] Spring Boot application
+- [x] PostgreSQL integration
+- [x] User entity
+- [x] User repository
+- [x] User registration
+- [x] BCrypt password hashing
+- [x] Login
+- [x] JWT generation
+- [x] JWT validation
+- [x] JWT authentication filter
+- [x] AuthResponse
+- [x] UserResponse
+- [x] Request validation
+- [x] Global exception handling
+- [x] Role-based authorization
+- [x] `USER` role
+- [x] `DOCTOR` role
+- [x] `ADMIN` role
+- [x] ADMIN-only user listing
+- [x] ADMIN-only doctor promotion
+- [x] USER → DOCTOR role transition
+- [x] Prevention of invalid role promotions
+- [x] Get user by ID
+- [x] Internal service authentication
+- [x] `X-Service-Key` authentication
+- [x] `ROLE_SERVICE`
+- [x] Environment-based JWT configuration
+- [x] Environment-based internal service API key
+- [x] Integration with `doctor-service`
+
+---
+
+# Version History
+
+## v1.0.0
+
+Initial authentication service implementation.
+
+Implemented:
+
+- User registration
+- Login
+- BCrypt password hashing
+- JWT authentication
+- JWT validation
+- Spring Security
+- PostgreSQL persistence
+- Basic role-based authorization
+- ADMIN-protected endpoints
+- Request validation
+- Exception handling
+
+---
+
+## v1.1.0
+
+Added doctor role management.
+
+Implemented:
+
+- `DOCTOR` role
+- ADMIN-only doctor promotion
+- `USER → DOCTOR` transition
+- Prevention of promoting existing doctors
+- Prevention of promoting administrators
+- Separation between authentication data and professional doctor data
+
+---
+
+## v1.2.0
+
+Added integration with `doctor-service`.
+
+Implemented:
+
+- `GET /users/{id}`
+- Internal service authentication
+- `X-Service-Key`
+- `ServiceAuthenticationFilter`
+- `ROLE_SERVICE`
+- Secure service-to-service communication
+- User existence validation for doctor creation
+- Doctor role validation through `auth-service`
+- Environment-based internal API key configuration
+- Complete integration between `auth-service` and `doctor-service`
+
+---
+
+# Related Services
+
+The authentication service currently integrates with:
+
+```text
+doctor-service
+```
+
+Responsibilities are separated as follows:
+
+```text
+auth-service
+├── User identity
+├── Credentials
+├── Roles
+├── Login
+├── JWT
+└── Authentication
+
+doctor-service
+├── Doctor profiles
+├── Professional experiences
+├── Studies
+└── Doctor-specific professional data
+```
+
+This separation allows each microservice to own its own domain and database while communicating through well-defined APIs.
