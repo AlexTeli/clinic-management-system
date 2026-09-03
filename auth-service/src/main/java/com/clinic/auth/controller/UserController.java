@@ -2,6 +2,7 @@ package com.clinic.auth.controller;
 
 import com.clinic.auth.dto.UserResponse;
 import com.clinic.auth.service.UserService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,5 +33,14 @@ public class UserController {
             @PathVariable Long id
     ) {
         return userService.promoteToDoctor(id);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponse> getUserById(
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(
+                userService.getUserById(id)
+        );
     }
 }

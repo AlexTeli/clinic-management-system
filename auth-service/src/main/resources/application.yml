@@ -21,3 +21,6 @@
   jwt:
     secret: ${JWT_SECRET}
     expiration: 86400000
+
+  service:
+    api-key: ${AUTH_SERVICE_API_KEY}

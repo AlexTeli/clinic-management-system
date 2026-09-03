@@ -1,6 +1,7 @@
 package com.clinic.auth.config;
 
 import com.clinic.auth.security.JwtAuthenticationFilter;
+import com.clinic.auth.security.ServiceAuthenticationFilter;
 import com.clinic.auth.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,11 +21,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ServiceAuthenticationFilter serviceAuthenticationFilter;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            ServiceAuthenticationFilter serviceAuthenticationFilter
+    ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.serviceAuthenticationFilter = serviceAuthenticationFilter;
     }
-
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -67,11 +72,15 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/register", "/auth/login").permitAll()
-                        .requestMatchers("/users").hasRole("ADMIN")
+                        .requestMatchers("/users/{id}").authenticated()
                         .requestMatchers("/users/*/promote-to-doctor").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
 
+                .addFilterBefore(
+                        serviceAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                )
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class

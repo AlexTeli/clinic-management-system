@@ -54,6 +54,23 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
     }
 
+    public UserResponse getUserById(Long userId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new UserNotFoundException(
+                                "User not found with id: " + userId
+                        )
+                );
+
+        return new UserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRole()
+        );
+    }
+
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll()
                 .stream()
