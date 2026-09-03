@@ -8,6 +8,9 @@ import com.clinic.doctor.repository.DoctorRepository;
 import com.clinic.doctor.repository.ExperienceRepository;
 import org.springframework.stereotype.Service;
 import com.clinic.doctor.exception.ResourceNotFoundException;
+import com.clinic.doctor.exception.ForbiddenOperationException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 
@@ -43,6 +46,7 @@ public class ExperienceService {
             Long doctorId,
             ExperienceRequest request
     ) {
+        checkOwnership(doctorId);
 
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() ->
@@ -72,6 +76,7 @@ public class ExperienceService {
             Long experienceId,
             ExperienceRequest request
     ) {
+        checkOwnership(doctorId);
 
         Experience experience = experienceRepository
                 .findById(experienceId)
@@ -104,6 +109,7 @@ public class ExperienceService {
             Long doctorId,
             Long experienceId
     ) {
+        checkOwnership(doctorId);
 
         Experience experience = experienceRepository
                 .findById(experienceId)
@@ -121,6 +127,37 @@ public class ExperienceService {
         }
 
         experienceRepository.delete(experience);
+    }
+
+    private void checkOwnership(Long doctorId) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        Long currentUserId = (Long) authentication.getPrincipal();
+
+        boolean isAdmin = authentication.getAuthorities()
+                .stream()
+                .anyMatch(authority ->
+                        authority.getAuthority().equals("ROLE_ADMIN")
+                );
+
+        if (isAdmin) {
+            return;
+        }
+
+        Doctor doctor = doctorRepository.findByUserId(currentUserId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Doctor profile not found for current user"
+                        )
+                );
+
+        if (!doctor.getId().equals(doctorId)) {
+            throw new ForbiddenOperationException(
+                    "You are not allowed to modify this doctor's data"
+            );
+        }
     }
 
     private ExperienceResponse toResponse(Experience experience) {

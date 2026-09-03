@@ -8,6 +8,9 @@ import com.clinic.doctor.repository.DoctorRepository;
 import com.clinic.doctor.repository.StudyRepository;
 import org.springframework.stereotype.Service;
 import com.clinic.doctor.exception.ResourceNotFoundException;
+import com.clinic.doctor.exception.ForbiddenOperationException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 
@@ -43,6 +46,7 @@ public class StudyService {
             Long doctorId,
             StudyRequest request
     ) {
+        checkOwnership(doctorId);
 
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() ->
@@ -71,6 +75,7 @@ public class StudyService {
             Long studyId,
             StudyRequest request
     ) {
+        checkOwnership(doctorId);
 
         Study study = studyRepository
                 .findById(studyId)
@@ -101,6 +106,7 @@ public class StudyService {
             Long doctorId,
             Long studyId
     ) {
+        checkOwnership(doctorId);
 
         Study study = studyRepository
                 .findById(studyId)
@@ -117,6 +123,37 @@ public class StudyService {
         }
 
         studyRepository.delete(study);
+    }
+
+    private void checkOwnership(Long doctorId) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        Long currentUserId = (Long) authentication.getPrincipal();
+
+        boolean isAdmin = authentication.getAuthorities()
+                .stream()
+                .anyMatch(authority ->
+                        authority.getAuthority().equals("ROLE_ADMIN")
+                );
+
+        if (isAdmin) {
+            return;
+        }
+
+        Doctor doctor = doctorRepository.findByUserId(currentUserId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Doctor profile not found for current user"
+                        )
+                );
+
+        if (!doctor.getId().equals(doctorId)) {
+            throw new ForbiddenOperationException(
+                    "You are not allowed to modify this doctor's data"
+            );
+        }
     }
 
     private StudyResponse toResponse(Study study) {
