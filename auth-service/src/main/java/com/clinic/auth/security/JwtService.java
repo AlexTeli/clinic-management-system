@@ -5,6 +5,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
+import com.clinic.auth.entity.User;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -27,20 +28,15 @@ public class JwtService {
         );
     }
 
-    public String generateToken(UserDetails userDetails) {
+    public String generateToken(User user) {
 
         Date now = new Date();
         Date expirationDate = new Date(now.getTime() + expiration);
 
         return Jwts.builder()
-                .subject(userDetails.getUsername())
-                .claim(
-                        "role",
-                        userDetails.getAuthorities()
-                                .iterator()
-                                .next()
-                                .getAuthority()
-                )
+                .subject(user.getUsername())
+                .claim("userId", user.getId())
+                .claim("role", "ROLE_" + user.getRole().name())
                 .issuedAt(now)
                 .expiration(expirationDate)
                 .signWith(getSigningKey())
@@ -51,6 +47,12 @@ public class JwtService {
         return extractClaim(token, Claims::getSubject);
     }
 
+    public Long extractUserId(String token) {
+        return extractClaim(
+                token,
+                claims -> claims.get("userId", Long.class)
+        );
+    }
     public String extractRole(String token) {
         return extractClaim(token, claims -> claims.get("role", String.class));
     }

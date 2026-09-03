@@ -5,6 +5,7 @@ import com.clinic.auth.dto.LoginRequest;
 import com.clinic.auth.dto.RegisterRequest;
 import com.clinic.auth.security.JwtService;
 import com.clinic.auth.service.UserService;
+import com.clinic.auth.entity.User;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -52,10 +53,10 @@ public class AuthController {
                 )
         );
 
-        String token = jwtService.generateToken(
-                (org.springframework.security.core.userdetails.UserDetails)
-                        authentication.getPrincipal()
+        User user = userService.findByUsername(
+                authentication.getName()
         );
+        String token = jwtService.generateToken(user);
 
         AuthResponse response = new AuthResponse(token, "Bearer");
 
